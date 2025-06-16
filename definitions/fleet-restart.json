@@ -1,0 +1,185 @@
+{ 
+  "Comment": "Flow to restart a given AppStream Fleet", 
+  "StartAt": "Set Fleet Vars", 
+  "States": { 
+    "Set Fleet Vars": { 
+      "Type": "Pass", 
+      "Next": "Check Sessions", 
+      "Assign": { 
+        "FleetName": "{% $states.input.Name %}", 
+        "SessionCheckCounter": 0, 
+        "StopCounter": 0, 
+        "StartCounter": 0 
+      } 
+    }, 
+    "Active Sessions Check": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "Wait", 
+          "Condition": "{% ($ActiveSessions) > (0) %}" 
+        } 
+      ], 
+      "Default": "StopFleet" 
+    }, 
+    "Wait": { 
+      "Type": "Wait", 
+      "Seconds": 900, 
+      "Next": "Increase SessionCheck Counter" 
+    }, 
+    "Increase SessionCheck Counter": { 
+      "Type": "Pass", 
+      "Next": "Choice", 
+      "Assign": { 
+        "SessionCheckCounter": "{% $SessionCheckCounter + 1 %}" 
+      } 
+    }, 
+    "Choice": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "Check Sessions", 
+          "Condition": "{% ($SessionCheckCounter) <= (20) %}" 
+        } 
+      ], 
+      "Default": "StopFleet" 
+    }, 
+
+    "StopFleet": { 
+      "Type": "Task", 
+      "Arguments": { 
+        "Name": "{% $FleetName %}" 
+      }, 
+      "Resource": "arn:aws:states:::aws-sdk:appstream:stopFleet", 
+      "Next": "Check Status : STOPPED" 
+    }, 
+
+    "Check Status : STOPPED": { 
+      "Type": "Task", 
+      "Arguments": { 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
+      }, 
+
+      "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
+      "Output": { 
+        "State": "{% $states.result.Fleets[*].State %}" 
+      }, 
+
+      "Next": "Fleet Stopped?" 
+    }, 
+
+    "Fleet Stopped?": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "StartFleet", 
+          "Condition": "{% ($states.input.State) = (\"STOPPED\") %}" 
+        } 
+      ], 
+      "Default": "Wait for Stop" 
+    }, 
+
+    "Wait for Stop": { 
+      "Type": "Wait", 
+      "Seconds": 60, 
+      "Next": "Increase Stop Counter" 
+    }, 
+    "Increase Stop Counter": { 
+      "Type": "Pass", 
+      "Next": "Stop Count <= 20", 
+      "Assign": { 
+        "StopCounter": "{% $StopCounter + 1 %}" 
+      } 
+    }, 
+
+    "Stop Count <= 20": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "Check Status : STOPPED", 
+          "Condition": "{% ($StopCounter) <= (20) %}" 
+        } 
+      ], 
+      "Default": "Fail" 
+    }, 
+    "StartFleet": { 
+      "Type": "Task", 
+      "Arguments": { 
+        "Name": "{% $FleetName %}" 
+      }, 
+      "Resource": "arn:aws:states:::aws-sdk:appstream:startFleet", 
+      "Next": "Check Status : RUNNING" 
+    }, 
+
+    "Check Status : RUNNING": { 
+      "Type": "Task", 
+      "Arguments": { 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
+      }, 
+
+      "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
+      "Output": { 
+        "Name": "{% $FleetName %}", 
+        "State": "{% $states.result.Fleets[*].State %}" 
+      }, 
+      "Next": "Fleet Running?" 
+    }, 
+    "Fleet Running?": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "Success", 
+          "Condition": "{% ($states.input.State) = (\"RUNNING\") %}" 
+        } 
+      ], 
+      "Default": "Wait for Start" 
+    }, 
+    "Success": { 
+      "Type": "Succeed" 
+    }, 
+    "Wait for Start": { 
+      "Type": "Wait", 
+      "Seconds": 60, 
+      "Next": "Increase Start Counter" 
+    }, 
+    "Increase Start Counter": { 
+      "Type": "Pass", 
+      "Next": "Start Count <= 20", 
+      "Assign": { 
+        "StartCounter": "{% $StartCounter + 1 %}" 
+      } 
+    }, 
+    "Start Count <= 20": { 
+      "Type": "Choice", 
+      "Choices": [ 
+        { 
+          "Next": "Check Status : RUNNING", 
+          "Condition": "{% ($StartCounter) <= (20) %}" 
+        } 
+      ], 
+      "Default": "Fail" 
+    }, 
+    "Fail": { 
+      "Type": "Fail" 
+    }, 
+    "Check Sessions": { 
+      "Type": "Task", 
+      "Arguments": { 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
+      }, 
+      "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
+      "Output": {}, 
+      "Assign": { 
+        "ActiveSessions": "{% $states.result.Fleets[*].ComputeCapacityStatus.ActiveUserSessions %}" 
+      }, 
+      "Next": "Active Sessions Check" 
+    } 
+  }, 
+  "QueryLanguage": "JSONata" 
+} 

@@ -1,0 +1,41 @@
+{ 
+  "Comment": "Controller to launch Fleet Restart State Machine in bulk.", 
+  "StartAt": "Get Fleets", 
+  "States": { 
+    "Get Fleets": { 
+      "Type": "Task", 
+      "Arguments": {}, 
+      "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
+      "Output": { 
+        "Fleets": "{% $states.result.Fleets[*].Name %}" 
+      }, 
+      "Next": "ForEach Fleet" 
+    }, 
+    "ForEach Fleet": { 
+      "Type": "Map", 
+      "ItemProcessor": { 
+        "ProcessorConfig": { 
+          "Mode": "INLINE" 
+        }, 
+        "StartAt": "Step Functions StartExecution", 
+        "States": { 
+          "Step Functions StartExecution": { 
+            "Type": "Task", 
+            "Resource": "arn:aws:states:::states:startExecution.sync:2", 
+            "Arguments": { 
+              "StateMachineArn": "${fleet_restart_sfn_state_machine_arn}", 
+              "Input": { 
+                "Name": "{% $states.input %}" 
+              } 
+            }, 
+            "End": true 
+          } 
+        } 
+      }, 
+      "End": true, 
+      "Items": "{% $states.input.Fleets %}", 
+      "MaxConcurrency": 40 
+    } 
+  }, 
+  "QueryLanguage": "JSONata" 
+} 
