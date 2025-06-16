@@ -1,4 +1,10 @@
 terraform {
+  backend "s3" {
+    bucket = "mymediaiso"
+    key    = "state/terraform.tfstate"
+    region = "us-east-2"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
