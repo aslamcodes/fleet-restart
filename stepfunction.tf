@@ -18,7 +18,7 @@ resource "aws_sfn_state_machine" "fleet_restart" {
   role_arn = aws_iam_role.fleet_restart_step_function_role.arn
   name     = "fleet_restart_state_machine"
   definition = templatefile("${path.module}/definitions/fleet-restart.json", {
-
+    sns_resource_arn = aws_sns_topic.restart-alerts.arn
   })
 }
 

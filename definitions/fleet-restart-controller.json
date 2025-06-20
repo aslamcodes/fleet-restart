@@ -43,7 +43,7 @@
         }
       },
       "Items": "{% $states.input.Fleets %}",
-      "MaxConcurrency": 2,
+      "MaxConcurrency": 40,
       "End": true
     },
     "Handle Single Fleet": {

@@ -16,25 +16,25 @@
       "Type": "Choice", 
       "Choices": [ 
         { 
-          "Next": "Wait for Sessions", 
+          "Next": "Wait", 
           "Condition": "{% ($ActiveSessions) > (0) %}" 
         } 
       ], 
       "Default": "StopFleet" 
     }, 
-    "Wait for Sessions": { 
+    "Wait": { 
       "Type": "Wait", 
       "Seconds": 900, 
       "Next": "Increase SessionCheck Counter" 
     }, 
     "Increase SessionCheck Counter": { 
       "Type": "Pass", 
-      "Next": "Session Check Count <= 2", 
+      "Next": "Choice", 
       "Assign": { 
         "SessionCheckCounter": "{% $SessionCheckCounter + 1 %}" 
       } 
     }, 
-    "Session Check Count <= 2": { 
+    "Choice": { 
       "Type": "Choice", 
       "Choices": [ 
         { 
@@ -44,25 +44,44 @@
       ], 
       "Default": "StopFleet" 
     }, 
+
     "StopFleet": { 
       "Type": "Task", 
       "Arguments": { 
         "Name": "{% $FleetName %}" 
       }, 
       "Resource": "arn:aws:states:::aws-sdk:appstream:stopFleet", 
-      "Next": "Check Status : STOPPED" 
+      "Next": "Check Status : STOPPED",
+      "Retry": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "MaxAttempts": 2
+          }
+      ],
+      "Catch": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "Next": "FailWithSNS"
+          }
+      ]
     }, 
+
     "Check Status : STOPPED": { 
       "Type": "Task", 
       "Arguments": { 
-        "Names": ["{% $FleetName %}"] 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
       }, 
+
       "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
       "Output": { 
         "State": "{% $states.result.Fleets[*].State %}" 
       }, 
+
       "Next": "Fleet Stopped?" 
     }, 
+
     "Fleet Stopped?": { 
       "Type": "Choice", 
       "Choices": [ 
@@ -73,6 +92,7 @@
       ], 
       "Default": "Wait for Stop" 
     }, 
+
     "Wait for Stop": { 
       "Type": "Wait", 
       "Seconds": 60, 
@@ -80,20 +100,21 @@
     }, 
     "Increase Stop Counter": { 
       "Type": "Pass", 
-      "Next": "Stop Count <= 30", 
+      "Next": "Stop Count <= 20", 
       "Assign": { 
         "StopCounter": "{% $StopCounter + 1 %}" 
       } 
     }, 
-    "Stop Count <= 30": { 
+
+    "Stop Count <= 20": { 
       "Type": "Choice", 
       "Choices": [ 
         { 
           "Next": "Check Status : STOPPED", 
-          "Condition": "{% ($StopCounter) <= (30) %}" 
+          "Condition": "{% ($StopCounter) <= (20) %}" 
         } 
       ], 
-      "Default": "Fail - Fleet Stop Timeout" 
+      "Default": "FailWithSNS" 
     }, 
     "StartFleet": { 
       "Type": "Task", 
@@ -101,13 +122,40 @@
         "Name": "{% $FleetName %}" 
       }, 
       "Resource": "arn:aws:states:::aws-sdk:appstream:startFleet", 
+      "Retry": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "MaxAttempts": 2
+          }
+      ],
+      "Catch": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "Next": "FailWithSNS"
+          }
+      ],
       "Next": "Check Status : RUNNING" 
     }, 
+
     "Check Status : RUNNING": { 
       "Type": "Task", 
       "Arguments": { 
-        "Names": ["{% $FleetName %}"] 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
       }, 
+      "Retry": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "MaxAttempts": 1
+          }
+      ],
+      "Catch": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "Next": "FailWithSNS"
+          }
+      ],
       "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
       "Output": { 
         "Name": "{% $FleetName %}", 
@@ -148,20 +196,38 @@
           "Condition": "{% ($StartCounter) <= (20) %}" 
         } 
       ], 
-      "Default": "Fail - Fleet Start Timeout" 
+      "Default": "FailWithSNS" 
     }, 
-    "Fail - Fleet Start Timeout": { 
-      "Type": "Fail", 
-      "Error": "Timeout waiting for Fleet to Start" 
-    }, 
-    "Fail - Fleet Stop Timeout": { 
-      "Type": "Fail", 
-      "Error": "Timeout waiting for Fleet to Stop" 
+    "FailWithSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Arguments": {
+            "TopicArn": "${sns_resource_arn}",
+            "Message": "{% 'Fleet restart failed for fleet (name): ' & $FleetName %}"
+        },
+        "Next": "Fail"
+    },
+    "Fail": { 
+      "Type": "Fail" 
     }, 
     "Check Sessions": { 
       "Type": "Task", 
+      "Retry": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "MaxAttempts": 1
+          }
+      ],
+      "Catch": [
+          {
+              "ErrorEquals": ["States.ALL"],
+              "Next": "FailWithSNS"
+          }
+      ],
       "Arguments": { 
-      "Names": ["{% $FleetName %}"] 
+        "Names": [ 
+          "{% $FleetName %}" 
+        ] 
       }, 
       "Resource": "arn:aws:states:::aws-sdk:appstream:describeFleets", 
       "Output": {}, 

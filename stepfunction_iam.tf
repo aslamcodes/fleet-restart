@@ -16,14 +16,13 @@ resource "aws_iam_role" "bulk_restart_step_function_role" {
     ]
   })
 }
-
 resource "aws_iam_role_policy" "bulk_restart_step_function_policy" {
   name     = "fleet_bulk_restart_policy_${local.product}"
   role     = aws_iam_role.bulk_restart_step_function_role.id
   provider = aws.us-east-2
 
   policy = jsonencode({
-    Version = "2012-10-17"
+    Version = "2012-10-17",
     Statement = [
       {
         Effect = "Allow"
@@ -40,7 +39,7 @@ resource "aws_iam_role_policy" "bulk_restart_step_function_policy" {
       {
         Effect = "Allow"
         Action = [
-          "appstream:DescribeFleets",
+          "appstream:DescribeFleets"
         ]
         Resource = "*"
       },
@@ -86,6 +85,23 @@ resource "aws_iam_role_policy" "fleet_restart_step_function_policy" {
         ]
         Resource = "*"
       },
-    ]
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogDelivery",
+          "logs:CreateLogStream",
+          "logs:GetLogDelivery",
+          "logs:UpdateLogDelivery",
+          "logs:DeleteLogDelivery",
+          "logs:ListLogDeliveries",
+          "logs:PutLogEvents",
+          "logs:PutResourcePolicy",
+          "logs:DescribeResourcePolicies",
+          "logs:DescribeLogGroups"
+        ],
+        Resource = "*"
+      }
+    ],
   })
 }
+
